@@ -1,0 +1,634 @@
+#!/usr/bin/env python3
+# Copyright (c) 2023 Institute of Computing Technology, Chinese Academy of Sciences
+# xfuzz is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#          http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+# EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+# See the Mulan PSL v2 for more details.
+
+import argparse
+import csv
+import multiprocessing
+import os
+import re
+import shutil
+
+import xlsxwriter
+
+
+class Coverage(object):
+    def __init__(self, name):
+        self.name = name
+        self.total = None
+        self.reach = None
+        self.accumulated = None
+
+    def get_value(self):
+        return self.reach / self.total
+
+    def get_accumulative_value(self):
+        return self.accumulated / self.total
+
+    def metadata(self):
+        return [self.total, self.reach, self.accumulated]
+
+    def metadata_names(self):
+        names = ["total", "reach", "accumulated"]
+        return list(map(lambda x: f"{self.name}.{x}", names))
+
+    def __str__(self) -> str:
+        return ",".join(map(str, self.metadata()))
+
+
+class Simulation(object):
+    exit_code_name = [
+        "EXIT_GOOD_TRAP",
+        "EXIT_EXCEED_LIMIT",
+        "EXIT_BAD_TRAP",
+        "EXIT_EXCEPTION_LOOP",
+        "EXIT_SELF_MODIFIED_CODE",
+        "EXIT_SIM_EXIT",
+        "EXIT_DIFFTEST",
+        "EXIT_UNKNOWN"
+    ]
+
+    def __init__(self, workload_name):
+        self.workload_name = workload_name
+        self.num_instr = -1
+        self.num_cycle = -1
+        self.exit_code = -1
+        self.total_cover = -1
+        self.coverage = []
+
+    def metadata(self) -> list:
+        cover_metadata = sum(list(map(lambda x: x.metadata(), self.coverage)), [])
+        return [
+            self.workload_name,
+            self.test_size(),
+            self.num_instr,
+            self.num_cycle,
+            self.exit_code,
+            self.total_cover
+        ] + cover_metadata
+
+    def metadata_names(self) -> list:
+        cover_metadata_names = sum(list(map(lambda x: x.metadata_names(), self.coverage)), [])
+        return [
+            "workload_name",
+            "test_size",
+            "num_instr",
+            "num_cycle",
+            "exit_code",
+            "total_cover"
+        ] + cover_metadata_names
+
+    def test_size(self) -> int:
+        if self.workload_name.startswith("wim@") and "+" in self.workload_name:
+            return int(self.workload_name.split("+")[-1], base=16)
+        return -1
+
+    def __str__(self) -> str:
+        return ",".join(map(str, self.metadata()))
+
+
+class Report(object):
+    def __init__(self, dut_file, fuzzer_file):
+        self.corpus = []
+        self.fuzz_mode = None
+        self.results = []
+        self.uncovered = dict()
+        self.fuzzing_logs = []
+        self.load_dut_file(dut_file)
+        self.load_fuzzer_file(fuzzer_file)
+
+    def load_file(self, filename):
+        if filename.endswith(".dut"):
+            self.load_dut_file(filename)
+        elif filename.endswith(".fuzzer"):
+            self.load_fuzzer_file(filename)
+        else:
+            print(f"Unable to detect file format for ${filename}.")
+
+    def load_fuzzer_file(self, filename):
+        if len(self.fuzzing_logs) > 0:
+            print(f"Found non-empty fuzzing logs. Skip ${filename}.")
+            return
+        self.fuzzing_logs.append(["time", "corpus", "executions"])
+        with open(filename) as f:
+            for line in f:
+                items = line.replace(",", "").split()
+                exec_time = items[4].replace("h", "").replace("m", "").replace("s", "").split("-")
+                exec_time = sum(map(lambda x: 60 ** (2 - x[0]) * int(x[1]), enumerate(exec_time)))
+                corpus = int(items[8])
+                executions = int(items[12])
+                fuzzing_info = [exec_time, corpus, executions]
+                self.fuzzing_logs.append(fuzzing_info)
+
+    def load_dut_file(self, filename):
+        if len(self.results) > 0:
+            print(f"Found non-empty results. Skip ${filename}.")
+            return
+        is_corpus, is_finished = True, False
+        sim = None
+        cover, existed = None, False
+        with open(filename) as f:
+            for line in f:
+                if "The image is " in line:
+                    assert (sim is None)
+                    workload_name = line.split("The image is ")[-1].strip().split()[0]
+                    sim = Simulation(workload_name)
+                elif "instrCnt = " in line:
+                    assert (sim is not None)
+                    instr_cnt_str = line.split("instrCnt =")[1].split(", ")[0]
+                    sim.num_instr = int(instr_cnt_str.replace(",", "").strip())
+                    assert ("cycleCnt = " in line)
+                    cycle_cnt_str = line.split("cycleCnt =")[1].split(", ")[0]
+                    sim.num_cycle = int(cycle_cnt_str.replace(",", "").strip())
+                elif "COVERAGE: " in line:
+                    assert (sim is not None)
+                    assert (cover is None)
+                    items = line.strip().replace(",", "").split()
+                    cover = Coverage(f"{items[1].lower()}-cover")
+                    cover.total = int(items[2])
+                    cover.reach = int(items[3])
+                    cover.accumulated = int(items[4])
+                    sim.coverage.append(cover)
+                    cover = None
+                elif "ExitCode: " in line:
+                    assert (sim is not None)
+                    sim.exit_code = int(line.strip()[9:])
+                elif "Total Coverage:" in line and not is_finished:
+                    assert (sim is not None)
+                    sim.total_cover = float(line.strip()[15:-1])
+                    if is_corpus:
+                        self.corpus.append(sim)
+                    else:
+                        self.results.append(sim)
+                    sim = None
+                elif "Running NutShell Fuzzer for " in line:
+                    assert (is_corpus)
+                    assert (self.fuzz_mode is None)
+                    self.fuzz_mode = line
+                    is_corpus = False
+                elif "Exit due to max_runs == 0" in line:
+                    is_finished = True
+                elif line.startswith("Uncovered "):
+                    cover = f"{line.strip().split()[1].lower()}-cover"
+                    existed = False
+                    if cover in self.uncovered:
+                        existed = True
+                        continue
+                    self.uncovered[cover] = []
+                elif line.startswith("[") and cover is not None:
+                    items = line.strip().split()
+                    index = int(items[0][1:-1])
+                    value = " ".join(items[1:])
+                    if existed:
+                        assert (index, value) in self.uncovered[cover]
+                    else:
+                        self.uncovered[cover].append((index, value))
+
+    def __str__(self) -> str:
+        return "\n".join(map(str, self.results))
+
+    def get_summary(self):
+        summary = [
+            ["Fuzzing Mode:", self.fuzz_mode],
+            ["Total Testcases:", len(self.results)],
+            [],
+            ["Corpus Information:"],
+            self.corpus[0].metadata_names()
+        ] + list(map(lambda res: res.metadata(), self.corpus))
+        return summary
+
+    def get_fuzzer_logs(self):
+        return self.fuzzing_logs
+
+    def get_fuzzer_logs_time_range(self, log_time):
+        iter = 0
+        last_log = None
+        for log in self.fuzzing_logs[1:]:
+            while int(log[0]) > iter:
+                yield last_log[1:]
+                iter += 1
+            else:
+                last_log = log
+        while iter < log_time:
+            yield last_log[1:] if iter == int(last_log[0]) else [None for _ in last_log[1:]]
+            iter += 1
+
+    def get_metadata(self):
+        metadata = [["Testcase ID"] + self.results[0].metadata_names()]
+        for i, sim in enumerate(self.results):
+            metadata.append([i] + sim.metadata())
+        return metadata
+
+    def get_exit_code_dist(self):
+        exit_code = list(map(lambda s: s.exit_code, self.results))
+        code_list = sorted(list(set(exit_code)))
+        dist = [["Exit code", "Proportion"]]
+        for code in code_list:
+            dist.append([Simulation.exit_code_name[code], exit_code.count(code)])
+        return dist
+
+    def get_exit_code_dist_map(self):
+        return {x[0]: x[1] for x in self.get_exit_code_dist()[1:]}
+
+    def get_average_x_per_k(self):
+        exit_code = list(map(lambda s: s.exit_code, self.results))
+        code_list = sorted(list(set(exit_code)))
+        group_size = 1000
+        columns = ["testcase / K", "test_size", "instructions", "cycles"]
+        columns += list(map(lambda x: x.name, self.results[0].coverage))
+        columns += list(map(lambda x: f"{x.name}-reach", self.results[0].coverage))
+        columns += list(map(lambda x: Simulation.exit_code_name[x], code_list))
+        axpkt = [columns]
+        for i in range(0, (len(self.results) + group_size - 1) // group_size):
+            target = self.results[i * group_size: i * group_size + group_size]
+            target_len = len(target)
+            test_size = sum(map(lambda s: s.test_size(), target)) / target_len
+            num_instr = sum(map(lambda s: s.num_instr, target)) / target_len
+            num_cycle = sum(map(lambda s: s.num_cycle, target)) / target_len
+            row = [i + 1, test_size, num_instr, num_cycle]
+            for i in range(len(self.results[0].coverage)):
+                coverage = sum(map(lambda s: s.coverage[i].get_value(), target)) / target_len
+                row.append(coverage)
+            for i in range(len(self.results[0].coverage)):
+                cover_reach = target[-1].coverage[i].get_accumulative_value()
+                row.append(cover_reach)
+            for code in code_list:
+                code_count = list(map(lambda s: s.exit_code, target)).count(code)
+                row.append(code_count / len(target))
+            axpkt.append(row)
+        return axpkt
+
+    def get_uncovered_points(self):
+        for cover in self.uncovered:
+            csv = [["index", "serialize"]]
+            for (i, s) in self.uncovered[cover]:
+                csv.append([i, s])
+            yield (cover, csv)
+
+    def dump(self, output_file=None):
+        if output_file is None:
+            out_data = dict()
+            # summary
+            out_data["summary"] = self.get_summary()
+            # fuzzing status
+            out_data["fuzzing status"] = self.get_fuzzer_logs()
+            # metadata
+            out_data["Testcases"] = self.get_metadata()
+            # exit code distribution
+            out_data["Exit code distribution"] = self.get_exit_code_dist()
+            # average instructions/cycles/coverage per kilo testcases
+            out_data["Average X per kilo testcases"] = self.get_average_x_per_k()
+            # uncovered coverage points
+            for (name, csv) in self.get_uncovered_points():
+                out_data[f"{name}-uncover"] = csv
+            return out_data
+        else:
+            ReportWriter(output_file).write_csv_dict(self.dump()).close()
+
+
+class ReportWriter(object):
+    def __init__(self, filename):
+        self.csv_mode = filename.endswith(".csv")
+        if self.csv_mode:
+            self.csv_f = open(filename, 'w')
+            self.csv_writer = csv.writer(self.csv_f)
+        else:
+            if not filename.endswith(".xlsx"):
+                filename += ".xlsx"
+            self.workbook = xlsxwriter.Workbook(filename)
+
+    def write_dict(self, d, dict_name=""):
+        columns = []
+        for k in d:
+            columns.append([k] + d[k])
+        n_rows = [len(c) for c in columns]
+        assert max(n_rows) == min(n_rows)
+        n_rows = max(n_rows)
+        csv_data = map(lambda i: [c[i] for c in columns], range(n_rows))
+        self.write_csv(dict_name, csv_data)
+        return self
+
+    def write_csv_dict(self, d):
+        for key, value in d.items():
+            self.write_csv(key, value)
+        return self
+
+    def write_csv(self, worksheet_name, csv_data):
+        if self.csv_mode:
+            for row in csv_data:
+                self.csv_writer.writerow(row)
+            return self
+        worksheet = self.workbook.add_worksheet(worksheet_name)
+        for row, line in enumerate(csv_data):
+            for col, elem in enumerate(line):
+                if elem is not None:
+                    worksheet.write(row, col, elem)
+        return self
+
+    def close(self):
+        if self.csv_mode:
+            self.csv_f.close()
+        else:
+            self.workbook.close()
+
+
+class Visualizer(object):
+    def __init__(self):
+        self.rpts = []
+
+    def add_rpts(self, working_dir):
+        def recursive(dir):
+            dut_files, fuzzer_files = [], []
+            for filename in os.listdir(dir):
+                if os.path.isdir(os.path.join(dir, filename)):
+                    yield from recursive(os.path.join(dir, filename))
+                elif filename.endswith(".dut"):
+                    dut_files.append(filename)
+                elif filename.endswith(".fuzzer"):
+                    fuzzer_files.append(filename)
+            for dut_file in dut_files:
+                name = dut_file[:-4]
+                fuzzer_file = f"{name}.fuzzer"
+                if fuzzer_file in fuzzer_files:
+                    yield (dir, name)
+        def get_rpt(dir_name, name, results_queue):
+            dut_file, fuzzer_file = f"{name}.dut", f"{name}.fuzzer"
+            print(f"Loading reports for {dir_name} from {dut_file} and {fuzzer_file} ...")
+            rpt = Report(os.path.join(dir_name, dut_file), os.path.join(dir_name, fuzzer_file))
+            results_queue.put((os.path.join(dir_name, name), rpt.dump()))
+            print(f"Finished loading reports for {dir_name}")
+        processes, results_queue = [], multiprocessing.Queue()
+        for dir_name, name in recursive(working_dir):
+            proc = multiprocessing.Process(target=get_rpt, args=(dir_name, name, results_queue))
+            proc.start()
+            processes.append(proc)
+        while len(processes) != len(self.rpts):
+            print(f"Waiting for transmission of the results from job {len(self.rpts) + 1} / {len(processes)} ...")
+            self.rpts.append(results_queue.get())
+        for proc in processes:
+            proc.join()
+
+    def rpts_prefix(self):
+        if len(self.rpts) == 1:
+            return ""
+        return os.path.commonprefix(list(map(lambda x: x[0], self.rpts)))
+
+    def rpts_suffix(self):
+        if len(self.rpts) == 1:
+            return ""
+        prefix_len = len(self.rpts_prefix())
+        reversed_names = list(map(lambda x: x[0][prefix_len:][::-1], self.rpts))
+        return os.path.commonprefix(reversed_names)[::-1]
+
+    def dump(self, output_file, merge):
+        if merge:
+            self.dump_merged_results(output_file)
+        else:
+            for (name, rpt) in self.rpts:
+                output = f"{name}-rpt" if output_file is None else output_file
+                print(f"Exporting reports for {name} to {output} ...")
+                ReportWriter(output).write_csv_dict(rpt).close()
+
+    def merged_and_sorted_rpts(self):
+        def extract_name_numbers(s):
+            re_digits = re.compile(r"(\d+)")
+            pieces = re_digits.split(s[0])
+            pieces = list(map(lambda x: int(x) if x.isdecimal() else x.lower(), pieces))
+            return pieces
+        all_rpts = sorted(self.rpts, key=extract_name_numbers)
+        prefix_len, suffix_len = len(self.rpts_prefix()), len(self.rpts_suffix())
+        def name_legalize(n):
+            n = n[prefix_len:]
+            if suffix_len > 0:
+                n = n[:-suffix_len]
+            return n.replace("/", "_")
+        names = [name_legalize(name) for (name, _) in all_rpts]
+        rpts = [rpt for (_, rpt) in all_rpts]
+        return (names, rpts)
+
+    def dump_merged_results(self, output_file):
+        def do_iter(table, primary_keys, is_strict):
+            empty_row = [None for _ in table[0]]
+            index, last_row = 1, empty_row
+            for key in primary_keys:
+                while index < len(table) and (last_row[0] is None or last_row[0] < key):
+                    last_row = table[index]
+                    index += 1
+                is_same = last_row[0] == key
+                yield last_row if not is_strict or is_same else empty_row
+        def do_search(table, primary_keys, is_unordered, is_strict):
+            if is_unordered:
+                for key in primary_keys:
+                    found = False
+                    for t in table[1:]:
+                        if t[0] == key:
+                            found = True
+                            yield t
+                    if not found:
+                        yield [None for _ in table[0]]
+            else:
+                yield from do_iter(table, primary_keys, is_strict)
+        def do_merge(names, tables):
+            headers = [t[0] for t in tables]
+            # must have the same primary header
+            if len(set([h[0] for h in headers])) != 1:
+                return (False, None, None)
+            primary_header = headers[0][0]
+            # some primary headers are removed from the merged reports
+            if primary_header in ["Testcase ID"]:
+                return (False, None, None)
+            # must have a consistent number of columns
+            for table in tables:
+                if len(set([len(t) for t in table])) != 1:
+                    return (False, None, None)
+            # check whether we need to strictly compare or search
+            is_strict = primary_header in ["Exit code", "index"]
+            # check whether we need to search in an unordered list
+            is_unordered = primary_header in ["Exit code"]
+            # merge the headers
+            other_headers = list(sorted(set(sum([h[1:] for h in headers], [])), key=lambda s: s.lower()))
+            other_headers_with_name = list(sum([[f"{h}-{n}" for n in names] + [f"{h}-average"] for h in other_headers], []))
+            # check whether we need to replace the rows with True(1) or False(2)
+            is_binary = primary_header in ["index"] and other_headers == ["serialize"]
+            if is_binary:
+                other_headers_with_name = other_headers + names
+            extra_info = dict()
+            merged_results = [[primary_header] + other_headers_with_name]
+            extra_info[primary_header] = []
+            # merge the keys
+            try:
+                primary_keys = set(sum([[r[0] for r in t[1:]] for t in tables], []))
+                primary_keys = sorted(primary_keys)
+            except TypeError as e:
+                print("ERROR: The primary keys seem to have different types:", primary_keys)
+                raise e
+            header_indices = [[hs.index(h) if h in hs else None for hs in headers] for h in other_headers]
+            table_iters = [do_search(t, primary_keys, is_unordered, is_strict) for t in tables]
+            for key in primary_keys:
+                row = [key]
+                extra_info[primary_header].append(key)
+                table_rows = [next(i) for i in table_iters]
+                if is_binary:
+                    data = list(set([x for x in sum([r[1:] for r in table_rows], []) if x is not None]))
+                    assert len(data) == 1
+                    row += data
+                for indices, header in zip(header_indices, other_headers):
+                    sub_row = []
+                    for (r, index) in zip(table_rows, indices):
+                        entry = r[index] if index is not None else None
+                        entry_b = 0 if entry is None else 1
+                        sub_row.append(entry_b if is_binary else entry)
+                    row += sub_row
+                    if not is_binary:
+                        sub_row = [x for x in sub_row if x is not None]
+                        average = None if len(sub_row) == 0 else sum(sub_row) / len(sub_row)
+                        row.append(average)
+                        if header not in extra_info:
+                            extra_info[header] = []
+                        extra_info[header].append(average)
+                merged_results.append(row)
+            return (True, merged_results, extra_info)
+        (names, rpts) = self.merged_and_sorted_rpts()
+        # check the existence of output_file
+        if output_file is None:
+            output_file = self.rpts_prefix()
+            if output_file == "":
+                output_file = "."
+            if not os.path.exists(output_file):
+                output_file = os.path.dirname(output_file)
+            assert (os.path.exists(output_file))
+            output_file = os.path.join(output_file, "rpt-merged")
+        print(f"Exporting merged reports to {output_file} ...")
+        writer = ReportWriter(output_file)
+        all_workbooks = sorted(set(sum([list(r.keys()) for r in rpts], [])))
+        for workbook in all_workbooks:
+            print(f"Trying to merge {workbook} ... ", end="")
+            names_tables = list(zip(*[(n, rpt[workbook]) for (n, rpt) in zip(names, rpts) if workbook in rpt]))
+            is_merged, csv, extra = do_merge(list(names_tables[0]), list(names_tables[1]))
+            if is_merged:
+                writer.write_csv(workbook, csv)
+            print("OK!" if is_merged else "SKIPPED!")
+            if extra is not None and len(extra.keys()) > 1:
+                print(f"Exporting extra information for {workbook} ...", end="")
+                csv_name = f"{output_file}.{workbook}.csv"
+                ReportWriter(csv_name).write_dict(extra).close()
+                print("OK!")
+        writer.close()
+
+
+def find_reports(directories, prefix, suffix=".xlsx"):
+    for d in directories:
+        for filename in os.listdir(d):
+            f = os.path.join(d, filename)
+            if os.path.isdir(f):
+                yield from find_reports([f], prefix, suffix)
+            elif filename.startswith(prefix) and filename.endswith(suffix) and os.path.isfile(f):
+                yield os.path.realpath(f)
+
+
+def abbr_names(files):
+    names = [f.split("/") for f in files]
+    lens = [len(n) for n in names]
+    for i in range(min(lens)):
+        prefix = os.path.commonprefix([n[i] for n in names])
+        for n in names:
+            n[i] = n[i][len(prefix):]
+    return ["-".join([x for x in n if x]) for n in names]
+
+
+def collect_xlsx(files, output):
+    names = [n + ".xlsx" for n in abbr_names(files)]
+    # create output dir if it does not exist
+    if output is None:
+        output = os.path.join(os.path.commonpath(files), "collected_xlsx")
+    o = os.path.realpath(output)
+    if not os.path.isdir(o):
+        os.mkdir(o)
+    # copy files one by one
+    names = [os.path.join(o, n) for n in names]
+    for (n, f) in zip(names, files):
+        shutil.copyfile(f, n)
+        print(f"cp {f} {n}")
+
+
+def merge_csv(names, files, collect_filter):
+    csvfiles = [open(f, newline='') for f in files]
+    readers = [csv.DictReader(f) for f in csvfiles]
+    headers = list(dict.fromkeys(sum([r.fieldnames for r in readers], [])))
+    # this is the primary header and will not changed
+    primary_header = headers[0]
+    # others will be filtered
+    headers = headers[1:]
+    if collect_filter is not None:
+        headers = [h for h in headers if any(f in h for f in collect_filter.split(","))]
+    if len(headers) == 0:
+        return None
+    csv_datas = dict.fromkeys(headers)
+    for h in headers:
+        csv_datas[h] = [[primary_header] + list(names)]
+    for i, r in enumerate(readers):
+        for j, row in enumerate(r):
+            p = row[primary_header]
+            for h in headers:
+                if len(csv_datas[h]) <= j + 1:
+                    csv_datas[h].append([int(p) if p.isdigit() else p])
+                # add Nones with different lengths of fuzzing
+                while len(csv_datas[h][j + 1]) < i + 1:
+                    csv_datas[h][j + 1].append(None)
+                assert len(csv_datas[h][j + 1]) == i + 1
+                # check primary key is the same
+                assert p == str(csv_datas[h][j + 1][0])
+                csv_datas[h][j + 1].append(float(row[h]))
+    return csv_datas
+
+
+def collect_csv(files, output, collect_filter):
+    # names: fuzzing runs
+    names = abbr_names([os.path.dirname(f) for f in files])
+    # workbooks: statistics
+    workbooks = [os.path.splitext(os.path.basename(f))[0] for f in files]
+    # remove common prefix from workbooks
+    prefix_len = len(os.path.commonprefix(workbooks))
+    workbooks = [w[prefix_len:] for w in workbooks]
+    # check existence of the output directory
+    if output is None:
+        output = os.path.join(os.path.commonpath(files), "collected_xlsx")
+    if not os.path.exists(output):
+        os.mkdir(output)
+    # write to the xlsx file
+    for workbook in sorted(set(workbooks)):
+        output_file = os.path.join(output, f"rpt-collected-{workbook}.xlsx")
+        targets = [(n, f) for (n, w, f) in zip(names, workbooks, files) if w == workbook]
+        targets = sorted(targets, key=lambda x: x[0])
+        csv_data = merge_csv(*zip(*targets), collect_filter)
+        if csv_data is not None:
+            print(f"create {output_file}")
+            ReportWriter(output_file).write_csv_dict(csv_data).close()
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='fuzzing log parser for bugfinder')
+    parser.add_argument('input', nargs='*', help='input directory for the fuzzing log files')
+    parser.add_argument('--output', '-o', help='output file')
+    parser.add_argument('--verbose', '-v', action='store_true')
+    parser.add_argument('--merge', '-M', action='store_true')
+    parser.add_argument('--collect', '-C', action='store_true')
+    parser.add_argument('--collect-filter', help='column names for matching')
+    parser.add_argument('--prefix', default='rpt-merged')
+
+    args = parser.parse_args()
+
+    if args.collect:
+        collect_xlsx(list(find_reports(args.input, args.prefix)), args.output)
+        collect_csv(list(find_reports(args.input, args.prefix, suffix=".csv")), args.output, args.collect_filter)
+    else:
+        assert len(args.input) == 1
+        vis = Visualizer()
+        vis.add_rpts(args.input[0])
+        vis.dump(args.output, args.merge)

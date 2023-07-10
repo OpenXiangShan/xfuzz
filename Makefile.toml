@@ -1,0 +1,10 @@
+[tasks.clean]
+command = "cargo"
+args = ["clean"]
+
+[tasks.build-all]
+command = "cargo"
+args = ["build", "--release"]
+
+[tasks.rebuild]
+dependencies = ["clean", "build-all"]

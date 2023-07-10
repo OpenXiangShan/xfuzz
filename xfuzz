@@ -1,0 +1,276 @@
+#!/usr/bin/env python3
+# Copyright (c) 2023 Institute of Computing Technology, Chinese Academy of Sciences
+# xfuzz is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#          http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+# EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+# See the Mulan PSL v2 for more details.
+
+import argparse
+import os
+import shutil
+import signal
+import subprocess
+import time
+
+
+def prepare_optional_args(args):
+    cmd = [None if x[1] is None else f"--{x[0]}={x[1]}" for x in args]
+    return list(filter(lambda _: _ is not None, cmd))
+
+
+def prepare_binary_args(args):
+    cmd = [f"--{x[0]}" if x[1] else None for x in args]
+    return list(filter(lambda _: _ is not None, cmd))
+
+class ProcControl(object):
+    def __init__(self, n_procs):
+        self.n_procs = n_procs if n_procs is not None else 200
+        self.running = []
+
+    def exec_cmd(self, cmd, env=None, stdout=None, stderr=None):
+        self.wait_on_full()
+        use_shell = isinstance(cmd, str)
+        p = subprocess.Popen(cmd, stdout=stdout, stderr=stderr, env=env, preexec_fn=os.setsid, shell=use_shell)
+        self.running.append(p)
+        return p
+
+    def wait_on_full(self):
+        while len(self.running) >= self.n_procs:
+            self.running = [p for p in self.running if p.poll() is None]
+            time.sleep(1)
+
+class Xfuzz(object):
+    def __init__(self, ctrl, elf_path, coverage, max_iters, max_runs, verbose, no_pipe, corpus_input, corpus_output):
+        self.proc_ctrl = ctrl
+        self.elf_path = os.path.realpath(elf_path)
+        self.coverage = coverage
+        self.max_iters = max_iters
+        self.max_runs = max_runs
+        self.random_input = args.random_input
+        self.verbose = verbose
+        self.no_pipe = no_pipe
+        self.corpus_input = corpus_input
+        self.corpus_output = corpus_output
+
+    def cmd(self) -> list:
+        base_cmd = [self.elf_path]
+        optional_cmd = prepare_optional_args([
+            ('corpus-input', self.corpus_input),
+            ("coverage", self.coverage),
+            ("max-iters", self.max_iters),
+            ("max-runs", self.max_runs)
+        ])
+        binary_cmd = prepare_binary_args([
+            ("random-input", self.random_input),
+            ("verbose", self.verbose)
+        ])
+        return base_cmd + optional_cmd + binary_cmd
+
+    def run(self, extra_args, worker_path, run_name="0"):
+        base_path = os.path.dirname(os.path.realpath(__file__))
+        env = os.environ.copy()
+        env["CARGO_MANIFEST_DIR"] = base_path
+        # if --no-pipe is set, we do not pipe the stdout, stderr to files
+        if self.no_pipe:
+            run_cmd = self.cmd() + extra_args
+            return self.proc_ctrl.exec_cmd(run_cmd, env)
+        # create worker directory
+        if not os.path.exists(worker_path):
+            os.makedirs(worker_path, exist_ok=True)
+        run_cmd = self.cmd() + extra_args
+        result_path = os.path.join(worker_path, run_name)
+        if not os.path.exists(result_path):
+            os.makedirs(result_path, exist_ok=True)
+        stdout_file = os.path.join(result_path, "stdout.txt")
+        stderr_file = os.path.join(result_path, "stderr.txt")
+        if self.corpus_output:
+            run_cmd += ['--corpus-output', f'{result_path}/testcases']
+        with open(stdout_file, "w") as stdout, open(stderr_file, "w") as stderr:
+            print(f"run {run_name}:", " ".join(run_cmd), ">", stdout_file, "2>", stderr_file)
+            proc = self.proc_ctrl.exec_cmd(run_cmd, env, stdout=stdout, stderr=stderr)
+        return proc
+
+    def report(self, worker_path, run_name="0", merge=False):
+        if self.no_pipe:
+            raise Exception("--no-pipe is set. Don't know what to report.")
+        if merge:
+            merge_cmd = ["./scripts/visualizer", worker_path, "--merge"]
+            print(f"merge reports in {worker_path}:", merge_cmd)
+            return self.proc_ctrl.exec_cmd(merge_cmd)
+        result_path = os.path.join(worker_path, run_name)
+        stdout_file = os.path.join(result_path, "stdout.txt")
+        rpt_file = os.path.join(result_path, f"rpt-{run_name}")
+        report_cmd = [
+            ["./scripts/separator", stdout_file],
+            ["./scripts/visualizer", result_path, "-o", rpt_file]
+        ]
+        report_cmd = ";".join([" ".join(cmd) for cmd in report_cmd])
+        print(f"report {run_name}:", report_cmd)
+        return self.proc_ctrl.exec_cmd(report_cmd)
+
+
+class XfuzzServer(object):
+    STEP_RUN    = "run"
+    STEP_REPORT = "report"
+    STEP_MERGE  = "merge"
+    STEPS = [STEP_RUN, STEP_REPORT, STEP_MERGE]
+
+    def __init__(self, args, ctrl) -> None:
+        self.xfuzz = []
+        for e in args.elf.split(","):
+            for c in args.coverage.split(","):
+                f = Xfuzz(ctrl, e, c, args.max_iters, args.max_runs, args.verbose, args.no_pipe,
+                        args.corpus_input, args.corpus_output)
+                self.xfuzz.append(f)
+        self.worker_path = args.output
+        self.steps = args.steps.split(",") if args.steps else self.STEPS
+        self.no_pipe = args.no_pipe
+        if self.no_pipe:
+            if self.STEP_REPORT in self.steps:
+                self.steps.remove(self.STEP_REPORT)
+            if self.STEP_MERGE in self.steps:
+                self.steps.remove(self.STEP_MERGE)
+        self.fuzzing = args.fuzzing
+        if self.fuzzing:
+            self.max_iters = args.max_iters
+            self.jobs = args.jobs
+            self.processors = args.processors
+        else:
+            self.auto_exit = args.auto_exit
+            self.repeat = args.repeat
+        self.workloads = []
+        self.extra_args = []
+        is_workload = True
+        for arg in args.extra_args:
+            if is_workload and arg.startswith("-"):
+                is_workload = False
+            if is_workload:
+                self.workloads.append(arg)
+            else:
+                self.extra_args.append(arg)
+        if len(self.extra_args) > 0:
+            self.extra_args = ['--'] + self.extra_args
+        self.procs = []
+        self.proc_ctrl = ctrl
+
+    def launch(self):
+        if "run" in self.steps:
+            self.run()
+        if "report" in self.steps:
+            self.wait_finish()
+            self.report()
+        if "merge" in self.steps:
+            self.wait_finish()
+            self.merge_reports()
+
+    def run(self):
+        if self.fuzzing:
+            for x in self.xfuzz:
+                for i in range(self.jobs):
+                    self.procs.append(x.run(["-f"] + self.extra_args, self.worker_path, run_name=f"{x.coverage}/{i}"))
+        else:
+            args = self.workloads
+            args += prepare_optional_args([
+                ("repeat", self.repeat)
+            ])
+            args += prepare_binary_args([
+                ("auto-exit", self.auto_exit)
+            ])
+            for x in self.xfuzz:
+                self.procs.append(x.run(args + self.extra_args, self.worker_path))
+
+    def report(self):
+        if self.fuzzing:
+            for x in self.xfuzz:
+                for i in range(self.jobs):
+                    self.procs.append(x.report(self.worker_path, run_name=f"{i}"))
+        else:
+            for x in self.xfuzz:
+                self.procs.append(x.report(self.worker_path))
+
+    def merge_reports(self):
+        if self.no_pipe:
+            raise Exception("--no-pipe is set. Don't know what to report.")
+        merge_cmd = ["./scripts/visualizer", self.worker_path, "--merge"]
+        print(f"merge reports in {self.worker_path}:", merge_cmd)
+        self.procs.append(self.proc_ctrl.exec_cmd(merge_cmd))
+
+    def load_workloads(self, workloads):
+        def recursive(p):
+            if os.path.isdir(p):
+                result = []
+                for filename in os.listdir(p):
+                    if filename.startswith("."):
+                        continue
+                    result += recursive(os.path.join(p, filename))
+                return result
+            return [p]
+
+        results = []
+        for workload in workloads:
+            if not os.path.exists(workload):
+                raise FileNotFoundError(f"{workload}")
+            results += recursive(os.path.realpath(workload))
+        return results
+
+    def is_finished(self) -> bool:
+        for proc in self.procs:
+            if proc.poll() is None:
+                return False
+        return True
+
+    def wait_finish(self):
+        while not self.is_finished():
+            time.sleep(1)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='xfuzz: a fuzzer wrapper')
+    # server options
+    parser.add_argument('--no-pipe', action='store_true')
+    parser.add_argument('--steps', type=str, help='options: run, report, merge')
+    parser.add_argument('--output', '-o', type=str, default="fuzz_results")
+    # harness options
+    parser.add_argument('--coverage', '-c', type=str)
+    parser.add_argument('--max-runs', type=int, help='maximum number of sim runs')
+    parser.add_argument('--verbose', action='store_true')
+    # fuzz options
+    parser.add_argument('--fuzzing', '-f', action='store_true')
+    parser.add_argument('--max-iters', type=int)
+    parser.add_argument('--jobs', '-j', type=int, default=1)
+    parser.add_argument('--processors', '-p', type=int, default=1)
+    parser.add_argument('--corpus-input')
+    parser.add_argument('--random-input', action='store_true')
+    parser.add_argument('--corpus-output', action='store_true')
+    # run options
+    parser.add_argument('--elf', help='fuzz elf path')
+    parser.add_argument('--auto-exit', action='store_true')
+    parser.add_argument('--repeat', type=int)
+    parser.add_argument('--max-cycles', type=int, help='maximum number of sim cycles')
+    parser.add_argument('extra_args', type=str, nargs='*')
+    # process control
+    parser.add_argument('--parallel', type=int)
+
+    args = parser.parse_args()
+
+    if os.path.isdir(args.elf):
+        args.elf = [os.path.join(args.elf, e) for e in os.listdir(args.elf)]
+        args.elf = [e for e in args.elf if os.path.isfile(e)]
+        args.elf = ",".join(args.elf)
+
+    ctrl = ProcControl(args.parallel)
+    server = XfuzzServer(args, ctrl)
+    try:
+        server.launch()
+        server.wait_finish()
+    except KeyboardInterrupt:
+        print("Interrupted. Exiting all processes ...")
+        for proc in server.procs:
+            try:
+                os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+            except ProcessLookupError:
+                pass

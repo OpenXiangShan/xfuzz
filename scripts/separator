@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+# Copyright (c) 2023 Institute of Computing Technology, Chinese Academy of Sciences
+# xfuzz is licensed under Mulan PSL v2.
+# You can use this software according to the terms and conditions of the Mulan PSL v2.
+# You may obtain a copy of Mulan PSL v2 at:
+#          http://license.coscl.org.cn/MulanPSL2
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+# EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+# MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+# See the Mulan PSL v2 for more details.
+
+import argparse
+import multiprocessing
+import re
+import string
+
+def logfile_separator(filename, result_queue):
+    fuzzer_filename = filename + ".fuzzer"
+    fuzzer_f = open(fuzzer_filename, "w")
+    dut_filename = filename + ".dut"
+    dut_f = open(dut_filename, "w")
+    ansi_escape = re.compile(r'\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])')
+    fuzzer_re = re.compile(r'^(.*)(\[\w+ #\d+\].*)$')
+    pending_line = ""
+    with open(filename, encoding="ISO-8859-1") as f:
+        for line in f:
+            line = ansi_escape.sub('', line)
+            line = "".join(filter(lambda x: x in string.printable, line)).lstrip()
+            fuzzer_match = fuzzer_re.match(line)
+            if fuzzer_match:
+                pending_line += fuzzer_match.group(1)
+                fuzzer_f.write(fuzzer_match.group(2) + "\n")
+            else:
+                dut_f.writelines(pending_line + line)
+                pending_line = ""
+    fuzzer_f.close()
+    dut_f.close()
+    result_queue.put(filename)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description='fuzzing log separator for bugfinder')
+    parser.add_argument('log_files', metavar='log_files', type=str, nargs='*',
+                        default=None, help='fuzzing log files')
+    parser.add_argument('--jobs', '-j', type=int, default=1)
+
+    args = parser.parse_args()
+
+    processes, results_queue, results = [], multiprocessing.Queue(), []
+    def wait_for_one():
+        finished = results_queue.get()
+        results.append(finished)
+        print(f"({len(results)} / {len(args.log_files)}) finish {finished}")
+    for filename in args.log_files:
+        proc = multiprocessing.Process(target=logfile_separator, args=(filename, results_queue))
+        if len(processes) - len(results) >= args.jobs:
+            wait_for_one()
+        proc.start()
+        processes.append(proc)
+    while len(processes) != len(results):
+        wait_for_one()
+    for proc in processes:
+        proc.join()
