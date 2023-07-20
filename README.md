@@ -5,6 +5,8 @@ For now, we are using the [LibAFL](https://github.com/AFLplusplus/LibAFL) as the
 
 ## Usage
 
+This is a Rust project. After the installation of Rust, please run `cargo install cargo-make` to install the cargo-make library.
+
 The [Makefile](Makefile) provides some simple commands to build the target `libfuzzer.a`.
 
 - `make init` to initialize the project
