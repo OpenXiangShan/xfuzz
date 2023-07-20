@@ -45,7 +45,7 @@ struct Arguments {
 }
 
 #[no_mangle]
-fn main() {
+fn main() -> i32 {
     let args = Arguments::parse();
 
     let mut workloads: Vec<String> = Vec::new();
@@ -66,11 +66,15 @@ fn main() {
 
     harness::set_sim_env(args.coverage, args.verbose, args.max_runs, emu_args);
 
+    let mut has_failed = 0;
     if workloads.len() > 0 {
         for _ in 0..args.repeat {
             let ret = harness::sim_run_multiple(&workloads, args.auto_exit);
-            if args.auto_exit && ret != 0 {
-                break;
+            if ret != 0 {
+                has_failed = 1;
+                if args.auto_exit {
+                    return ret;
+                }
             }
         }
         coverage::cover_display();
@@ -89,4 +93,6 @@ fn main() {
             args.corpus_output,
         );
     }
+
+    return has_failed;
 }
