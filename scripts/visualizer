@@ -168,7 +168,7 @@ class Report(object):
                     else:
                         self.results.append(sim)
                     sim = None
-                elif "Running NutShell Fuzzer for " in line:
+                elif "Running the Fuzzer for " in line:
                     assert (is_corpus)
                     assert (self.fuzz_mode is None)
                     self.fuzz_mode = line
