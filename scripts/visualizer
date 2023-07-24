@@ -477,6 +477,13 @@ class Visualizer(object):
                 table_rows = [next(i) for i in table_iters]
                 if is_binary:
                     data = list(set([x for x in sum([r[1:] for r in table_rows], []) if x is not None]))
+                    # patch for dynamically linked llvm.branch coverage points
+                    if len(data) != 1:
+                        prefix_len = len(os.path.commonprefix(data))
+                        if prefix_len > 0:
+                            print(f"Find conflicting rows at key({key}) with data: {data}")
+                            data = [data[0]]
+                            print(f"Using the first one as the target: {data[0]}")
                     assert len(data) == 1
                     row += data
                 for indices, header in zip(header_indices, other_headers):
