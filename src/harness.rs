@@ -90,6 +90,7 @@ pub(crate) fn sim_run_multiple(workloads: &Vec<String>, auto_exit: bool) -> i32 
 }
 
 pub static mut USE_RANDOM_INPUT: bool = false;
+pub static mut CONTINUE_ON_ERRORS: bool = false;
 
 pub(crate) fn fuzz_harness(input: &BytesInput) -> ExitKind {
     let ret = if unsafe { USE_RANDOM_INPUT } {
@@ -105,7 +106,8 @@ pub(crate) fn fuzz_harness(input: &BytesInput) -> ExitKind {
     io::stdout().flush().unwrap();
 
     // panic if return code is non-zero (this is for fuzzers to catch crashes)
-    if ret != 0 {
+    let do_panic = unsafe { !CONTINUE_ON_ERRORS && ret != 0 };
+    if do_panic {
         unsafe { display_uncovered_points() }
         panic!("<<<<<< Bug triggered >>>>>>");
     }

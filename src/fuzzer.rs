@@ -28,6 +28,7 @@ pub(crate) fn run_fuzzer(
     max_iters: Option<u64>,
     corpus_input: Option<String>,
     corpus_output: Option<String>,
+    continue_on_errors: bool,
 ) {
     // Scheduler, Feedback, Objective
     let scheduler = QueueScheduler::new();
@@ -87,6 +88,10 @@ pub(crate) fn run_fuzzer(
     if random_input {
         println!("We are using random input bytes");
         unsafe { harness::USE_RANDOM_INPUT = true };
+    }
+
+    if continue_on_errors {
+        unsafe { harness::CONTINUE_ON_ERRORS = true };
     }
 
     // Mutator

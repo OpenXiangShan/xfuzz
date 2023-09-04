@@ -36,6 +36,8 @@ struct Arguments {
     corpus_input: String,
     #[clap(long)]
     corpus_output: Option<String>,
+    #[clap(default_value_t = false, long)]
+    continue_on_errors: bool,
     // Run options
     #[clap(default_value_t = 1, long)]
     repeat: usize,
@@ -91,6 +93,7 @@ fn main() -> i32 {
             args.max_iters,
             corpus_input,
             args.corpus_output,
+            args.continue_on_errors,
         );
     }
 

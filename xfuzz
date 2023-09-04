@@ -51,6 +51,7 @@ class Xfuzz(object):
         self.max_iters = max_iters
         self.max_runs = max_runs
         self.random_input = args.random_input
+        self.continue_on_errors = args.continue_on_errors
         self.verbose = verbose
         self.no_pipe = no_pipe
         self.corpus_input = corpus_input
@@ -66,6 +67,7 @@ class Xfuzz(object):
         ])
         binary_cmd = prepare_binary_args([
             ("random-input", self.random_input),
+            ("continue-on-errors", self.continue_on_errors),
             ("verbose", self.verbose)
         ])
         return base_cmd + optional_cmd + binary_cmd
@@ -245,6 +247,7 @@ if __name__ == "__main__":
     parser.add_argument('--processors', '-p', type=int, default=1)
     parser.add_argument('--corpus-input')
     parser.add_argument('--random-input', action='store_true')
+    parser.add_argument('--continue-on-errors', action='store_true')
     parser.add_argument('--corpus-output', action='store_true')
     # run options
     parser.add_argument('--elf', help='fuzz elf path')
