@@ -10,6 +10,7 @@ std = []
 
 [dependencies]
 libafl = { path = "./LibAFL/libafl/" }
+libafl_bolts = { path = "./LibAFL/libafl_bolts/" }
 clap = { version = "4.0", features = ["derive"] }
 libc = "0.2"
 rand = "0.8.5"

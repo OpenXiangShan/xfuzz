@@ -13,8 +13,9 @@
 use std::fs;
 use std::path::PathBuf;
 
-use libafl::prelude::{BytesInput, Corpus, InMemoryCorpus, Input, OnDiskCorpus, RomuDuoJrRand};
+use libafl::prelude::{BytesInput, Corpus, InMemoryCorpus, Input, OnDiskCorpus};
 use libafl::state::{HasCorpus, StdState};
+use libafl_bolts::rands::RomuDuoJrRand;
 
 pub fn store_testcases(
     state: &mut StdState<
