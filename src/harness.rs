@@ -9,7 +9,6 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-
 extern crate libc;
 extern crate rand;
 
@@ -29,8 +28,6 @@ extern "C" {
     pub fn update_stats(bitmap: *mut c_char);
 
     pub fn display_uncovered_points();
-
-    pub fn set_max_runs(n_runs: c_ulonglong);
 
     pub fn set_cover_feedback(name: *const c_char);
 
@@ -91,6 +88,8 @@ pub(crate) fn sim_run_multiple(workloads: &Vec<String>, auto_exit: bool) -> i32 
 
 pub static mut USE_RANDOM_INPUT: bool = false;
 pub static mut CONTINUE_ON_ERRORS: bool = false;
+pub static mut NUM_RUNS: u64 = 0;
+pub static mut MAX_RUNS: u64 = u64::MAX;
 
 pub(crate) fn fuzz_harness(input: &BytesInput) -> ExitKind {
     let ret = if unsafe { USE_RANDOM_INPUT } {
@@ -111,6 +110,16 @@ pub(crate) fn fuzz_harness(input: &BytesInput) -> ExitKind {
         unsafe { display_uncovered_points() }
         panic!("<<<<<< Bug triggered >>>>>>");
     }
+
+    // panic to exit the fuzzer if max_runs is reached
+    unsafe { NUM_RUNS += 1 };
+    let do_exit = unsafe { NUM_RUNS >= MAX_RUNS };
+    if do_exit {
+        println!("Exit due to max_runs == 0");
+        unsafe { display_uncovered_points() }
+        panic!("Exit due to max_runs == 0");
+    }
+
     ExitKind::Ok
 }
 
@@ -130,7 +139,7 @@ pub(crate) fn set_sim_env(
     }
 
     if max_runs.is_some() {
-        unsafe { set_max_runs(max_runs.unwrap()) }
+        unsafe { MAX_RUNS = max_runs.unwrap() };
     }
 
     unsafe {
