@@ -9,7 +9,6 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
-
 use std::path::PathBuf;
 
 use crate::coverage::*;
@@ -29,6 +28,7 @@ pub(crate) fn run_fuzzer(
     corpus_input: Option<String>,
     corpus_output: Option<String>,
     continue_on_errors: bool,
+    save_errors: bool,
 ) {
     // Scheduler, Feedback, Objective
     let scheduler = QueueScheduler::new();
@@ -92,6 +92,10 @@ pub(crate) fn run_fuzzer(
 
     if continue_on_errors {
         unsafe { harness::CONTINUE_ON_ERRORS = true };
+    }
+
+    if save_errors {
+        unsafe { harness::SAVE_ERRORS = true };
     }
 
     // Mutator

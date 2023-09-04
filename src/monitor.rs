@@ -9,11 +9,12 @@
  * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
  * See the Mulan PSL v2 for more details.
  */
+extern crate md5;
 
 use std::fs;
 use std::path::PathBuf;
 
-use libafl::prelude::{BytesInput, Corpus, InMemoryCorpus, Input, OnDiskCorpus};
+use libafl::prelude::{BytesInput, Corpus, HasBytesVec, InMemoryCorpus, Input, OnDiskCorpus};
 use libafl::state::{HasCorpus, StdState};
 use libafl_bolts::rands::RomuDuoJrRand;
 
@@ -31,7 +32,6 @@ pub fn store_testcases(
     let count = corpus.count();
     println!("Total corpus count: {count}");
 
-    fs::create_dir_all(&output_dir).expect("Unable to create testcases directory");
     for id in corpus.ids() {
         let testcase: std::cell::RefMut<libafl::prelude::Testcase<BytesInput>> =
             corpus.get(id).unwrap().borrow_mut();
@@ -44,7 +44,22 @@ pub fn store_testcases(
         };
         println!("Corpus {id}: executions {executions}, scheduled_count {scheduled_count}, parent_id {parent_id}");
         let x = testcase.input().as_ref().unwrap();
-        x.to_file(PathBuf::from(format!("{output_dir}/{id}")).as_path())
-            .expect(format!("written {id} failed").as_str());
+        store_testcase(x, &output_dir, Some(id.to_string()));
     }
+}
+
+pub fn store_testcase(input: &BytesInput, output_dir: &String, name: Option<String>) {
+    fs::create_dir_all(&output_dir).expect("Unable to create the output directory");
+
+    let filename = if name.is_some() {
+        name.unwrap()
+    } else {
+        let mut context = md5::Context::new();
+        context.consume(input.bytes());
+        format!("{:x}", context.compute())
+    };
+
+    input
+        .to_file(PathBuf::from(format!("{output_dir}/{filename}")).as_path())
+        .expect(format!("written {filename} failed").as_str());
 }
