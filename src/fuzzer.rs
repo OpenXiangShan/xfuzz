@@ -64,6 +64,14 @@ pub(crate) fn run_fuzzer(
     )
     .unwrap();
 
+    if continue_on_errors {
+        unsafe { harness::CONTINUE_ON_ERRORS = true };
+    }
+
+    if save_errors {
+        unsafe { harness::SAVE_ERRORS = true };
+    }
+
     // Corpus
     if state.corpus().count() < 1 {
         if corpus_input.is_some() {
@@ -88,14 +96,6 @@ pub(crate) fn run_fuzzer(
     if random_input {
         println!("We are using random input bytes");
         unsafe { harness::USE_RANDOM_INPUT = true };
-    }
-
-    if continue_on_errors {
-        unsafe { harness::CONTINUE_ON_ERRORS = true };
-    }
-
-    if save_errors {
-        unsafe { harness::SAVE_ERRORS = true };
     }
 
     // Mutator
