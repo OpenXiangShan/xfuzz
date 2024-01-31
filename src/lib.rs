@@ -22,7 +22,7 @@ struct Arguments {
     // Fuzzer options
     #[clap(default_value_t = false, short, long)]
     fuzzing: bool,
-    #[clap(default_value_t = String::from("instr-imm"), short, long)]
+    #[clap(default_value_t = String::from("llvm.branch"), short, long)]
     coverage: String,
     #[clap(default_value_t = false, short, long)]
     verbose: bool,
