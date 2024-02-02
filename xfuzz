@@ -142,7 +142,6 @@ class XfuzzServer(object):
         if self.fuzzing:
             self.max_iters = args.max_iters
             self.jobs = args.jobs
-            self.processors = args.processors
         else:
             self.auto_exit = args.auto_exit
             self.repeat = args.repeat
@@ -246,7 +245,6 @@ if __name__ == "__main__":
     parser.add_argument('--fuzzing', '-f', action='store_true')
     parser.add_argument('--max-iters', type=int)
     parser.add_argument('--jobs', '-j', type=int, default=1)
-    parser.add_argument('--processors', '-p', type=int, default=1)
     parser.add_argument('--corpus-input')
     parser.add_argument('--random-input', action='store_true')
     parser.add_argument('--continue-on-errors', action='store_true')
@@ -256,7 +254,6 @@ if __name__ == "__main__":
     parser.add_argument('--elf', help='fuzz elf path')
     parser.add_argument('--auto-exit', action='store_true')
     parser.add_argument('--repeat', type=int)
-    parser.add_argument('--max-cycles', type=int, help='maximum number of sim cycles')
     parser.add_argument('extra_args', type=str, nargs='*')
     # process control
     parser.add_argument('--parallel', type=int)
