@@ -29,9 +29,11 @@ For example, it could be passed to [Verilator](https://github.com/verilator/veri
 The required interfaces between Rust and C/C++ modules are listed exclusively at [the harness file](src/harness.rs).
 
 We have upgraded the [DiffTest](https://github.com/OpenXiangShan/difftest) environment to support these interfaces.
-Currently only C++ branch coverage via LLVM sanitizer is supported.
-Both [Spike](https://github.com/OpenXiangShan/riscv-isa-sim) and [NEMU](https://github.com/OpenXiangShan/NEMU) support the instrumentation.
 Please refer to the [DiffTest README.md](https://github.com/OpenXiangShan/difftest/blob/master/README.md) for connecting your CPU design with the fuzzer.
+
+Specifically, for the coverage guidance for fuzzing, currently both C++ branch coverage via LLVM sanitizer and FIRRTL-instrumented coverage are supported.
+For C++ branch coverage, both [Spike](https://github.com/OpenXiangShan/riscv-isa-sim) and [NEMU](https://github.com/OpenXiangShan/NEMU) are supported.
+For FIRRTL-instrumented coverage, please refer to the [Coverage Instrumentation for Chisel Designs section](#coverage-instrumentation-for-chisel-designs) of this README.
 
 Once you build the simulation executable, [xfuzz](xfuzz) provides some Python scripts to run the fuzzer and parse the outputs.
 
