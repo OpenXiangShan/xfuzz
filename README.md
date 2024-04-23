@@ -5,7 +5,7 @@ For now, we are using the [LibAFL](https://github.com/AFLplusplus/LibAFL) as the
 
 ## Usage
 
-This is a Rust project. After the installation of Rust, please run `cargo install cargo-make` to install the cargo-make library.
+This is a Rust project. To install Rust, please see [https://www.rust-lang.org/tools/install](https://www.rust-lang.org/tools/install). After the installation of Rust, please run `cargo install cargo-make` to install the cargo-make library.
 
 The [Makefile](Makefile) provides some simple commands to build the target `libfuzzer.a`.
 
@@ -20,6 +20,35 @@ We have a real example using the rocket-chip (DUT) and Spike (REF) [here](https:
 This `test-difftest-fuzzing` CI test builds the fuzzer and runs it for 10000 runs (testcases).
 
 Run `fuzzer --help` for a full list of runtime arguments.
+
+An example build flow with rocket-chip as the design-under-test is listed as follows:
+
+```bash
+git clone https://github.com/OpenXiangShan/xfuzz.git
+cd xfuzz && make init && make build && cd ..
+
+git clone https://github.com/OpenXiangShan/riscv-arch-test.git
+cd riscv-arch-test/riscv-test-suite
+make build_I -j2
+rm build/*.elf build/*.txt
+cd ../..
+
+git clone https://github.com/OpenXiangShan/riscv-isa-sim.git
+# Replace ROCKET_CHIP with other CPU models (NUTSHELL, XIANGSHAN) if necessary
+make -C riscv-isa-sim/difftest CPU=ROCKET_CHIP SANCOV=1 -j16
+
+export SPIKE_HOME=$(pwd)/riscv-isa-sim
+export XFUZZ_HOME=$(pwd)/xfuzz
+export NOOP_HOME=$(pwd)/rocket-chip
+export CORPUS=$(pwd)/riscv-arch-test/riscv-test-suite/build
+
+git clone -b dev-difftest --single-branch https://github.com/OpenXiangShan/rocket-chip.git
+cd rocket-chip && make init && make bootrom
+make emu XFUZZ=1 REF=$SPIKE_HOME/difftest/build/riscv64-spike-so LLVM_COVER=1 -j16
+
+# Run the fuzzer for 100 inputs
+./build/fuzzer -f --max-runs 100 --corpus-input $CORPUS -- --max-cycles 10000
+```
 
 ## Integrating Hardware Designs
 
