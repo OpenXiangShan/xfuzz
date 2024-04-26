@@ -37,11 +37,14 @@ git clone https://github.com/OpenXiangShan/riscv-isa-sim.git
 # Replace ROCKET_CHIP with other CPU models (NUTSHELL, XIANGSHAN) if necessary
 make -C riscv-isa-sim/difftest CPU=ROCKET_CHIP SANCOV=1 -j16
 
+# Some shortcuts. They are not required if you understand why we set them
 export SPIKE_HOME=$(pwd)/riscv-isa-sim
 export XFUZZ_HOME=$(pwd)/xfuzz
 export NOOP_HOME=$(pwd)/rocket-chip
 export CORPUS=$(pwd)/riscv-arch-test/riscv-test-suite/build
 
+# Here we build the rocket-chip
+# For other CPU models, please refer to their README for help
 git clone -b dev-difftest --single-branch https://github.com/OpenXiangShan/rocket-chip.git
 cd rocket-chip && make init && make bootrom
 make emu XFUZZ=1 REF=$SPIKE_HOME/difftest/build/riscv64-spike-so LLVM_COVER=1 -j16
@@ -85,6 +88,23 @@ All supported Chisel/FIRRTL coverage metrics are listed in the `CoverPoint.getTr
 We sincerely thank the original authors for these FIRRTL transforms.
 The rights of the source code are reserved by the original repositories and authors.
 If you don't like this project integrating your code, please feel free to tell us through GitHub issues to allow us remove them.
+
+An example to build rocket-chip with FIRRTL coverage instrumentation is as follows.
+
+```bash
+git clone -b dev-difftest --single-branch https://github.com/OpenXiangShan/rocket-chip.git
+cd rocket-chip && make init && make bootrom
+
+# Apply the patch to include command line arguments and coverage transforms
+git apply generator/chisel3/ccover.patch
+
+# Add the ccover directory. You may instead add it as a git submodule if you want to track the changes
+git clone https://github.com/OpenXiangShan/xfuzz.git ccover
+
+# Now build the fuzzer with FIRRTL_COVER instead of LLVM_COVER
+# To see the full list of supported coverage metrics, please read this README again
+make emu XFUZZ=1 REF=$SPIKE_HOME/difftest/build/riscv64-spike-so FIRRTL_COVER=mux,control,line,toggle,ready_valid -j16
+```
 
 ## License
 
