@@ -35,6 +35,8 @@ cd ../..
 
 git clone https://github.com/OpenXiangShan/riscv-isa-sim.git
 # Replace ROCKET_CHIP with other CPU models (NUTSHELL, XIANGSHAN) if necessary
+# SANCOV=1 lets the C++ compile instrument coverage definitions into the elf
+# If you are not using the LLVM instrumented coverage, remove SANCOV=1 and rebuild it after `make clean`
 make -C riscv-isa-sim/difftest CPU=ROCKET_CHIP SANCOV=1 -j16
 
 # Some shortcuts. They are not required if you understand why we set them
@@ -66,6 +68,8 @@ Please refer to the [DiffTest README.md](https://github.com/OpenXiangShan/diffte
 Specifically, for the coverage guidance for fuzzing, currently both C++ branch coverage via LLVM sanitizer and FIRRTL-instrumented coverage are supported.
 For C++ branch coverage, both [Spike](https://github.com/OpenXiangShan/riscv-isa-sim) and [NEMU](https://github.com/OpenXiangShan/NEMU) are supported.
 For FIRRTL-instrumented coverage, please refer to the [Coverage Instrumentation for Chisel Designs section](#coverage-instrumentation-for-chisel-designs) of this README.
+Each of the supported coverage metrics can exist independently and is configurable in the building steps.
+The build command are self-explained and we assume the users can understand them easily.
 
 Once you build the simulation executable, [xfuzz](xfuzz) provides some Python scripts to run the fuzzer and parse the outputs.
 
@@ -90,6 +94,8 @@ The rights of the source code are reserved by the original repositories and auth
 If you don't like this project integrating your code, please feel free to tell us through GitHub issues to allow us remove them.
 
 An example to build rocket-chip with FIRRTL coverage instrumentation is as follows.
+It is required to build the spike-so (without `SANCOV=1`) before `make emu`.
+If you are building the spike-so with `SANCOV=1`, please add `LLVM_COVER=1` as well.
 
 ```bash
 git clone -b dev-difftest --single-branch https://github.com/OpenXiangShan/rocket-chip.git
@@ -102,8 +108,9 @@ git apply generator/chisel3/ccover.patch
 git clone https://github.com/OpenXiangShan/xfuzz.git ccover
 
 # Now build the fuzzer with FIRRTL_COVER instead of LLVM_COVER
-# To see the full list of supported coverage metrics, please read this README again
-make emu XFUZZ=1 REF=$SPIKE_HOME/difftest/build/riscv64-spike-so FIRRTL_COVER=mux,control,line,toggle,ready_valid -j16
+# Please make sure you have successfully built the spike-so at SPIKE_HOME without SANCOV=1
+# To see the full list of supported FIRRTL coverage metrics, please read this README again
+make emu REF=$SPIKE_HOME/difftest/build/riscv64-spike-so XFUZZ=1 FIRRTL_COVER=mux,control,line,toggle,ready_valid -j16
 ```
 
 ## License
