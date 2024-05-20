@@ -69,7 +69,7 @@ Specifically, for the coverage guidance for fuzzing, currently both C++ branch c
 For C++ branch coverage, both [Spike](https://github.com/OpenXiangShan/riscv-isa-sim) and [NEMU](https://github.com/OpenXiangShan/NEMU) are supported.
 For FIRRTL-instrumented coverage, please refer to the [Coverage Instrumentation for Chisel Designs section](#coverage-instrumentation-for-chisel-designs) of this README.
 Each of the supported coverage metrics can exist independently and is configurable in the building steps.
-The build command are self-explained and we assume the users can understand them easily.
+The build commands are self-explained and we assume the users can understand them easily.
 
 Once you build the simulation executable, [xfuzz](xfuzz) provides some Python scripts to run the fuzzer and parse the outputs.
 
