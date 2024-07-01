@@ -117,3 +117,9 @@ make emu REF=$SPIKE_HOME/difftest/build/riscv64-spike-so XFUZZ=1 FIRRTL_COVER=mu
 
 This project is licensed under [the Mulan Permissive Software License, Version 2](LICENSE) except explicit specified.
 All files in the `instrumentation` directory are licensed under their original licenses with rights reserved by the original repositories and authors.
+
+This project has been adopted by researchers from academia and industry.
+We appreciate their contributions for the open-source community.
+Your valuable Issues and Pull Requests are always welcomed.
+
+- PathFuzz: Broadening Fuzzing Horizons with Footprint Memory for CPUs. DAC'23. [DOI](https://doi.org/10.1145/3649329.3655911), [Paper](https://www.dac.com/proceedings61), [Presentation (ChinaSys)](http://www.cnsys24-spring.org.cn/ppt/Oral1_%E5%BE%90%E6%98%93%E9%9A%BE.pdf).
