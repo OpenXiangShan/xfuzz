@@ -113,6 +113,8 @@ git clone https://github.com/OpenXiangShan/xfuzz.git ccover
 make emu REF=$SPIKE_HOME/difftest/build/riscv64-spike-so XFUZZ=1 FIRRTL_COVER=mux,control,line,toggle,ready_valid -j16
 ```
 
+You may refer to the [FuzzingNutShell](https://github.com/poemonsense/FuzzingNutShell) repo for a demo.
+
 ## License
 
 This project is licensed under [the Mulan Permissive Software License, Version 2](LICENSE) except explicit specified.
