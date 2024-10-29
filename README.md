@@ -55,6 +55,14 @@ make emu XFUZZ=1 REF=$SPIKE_HOME/difftest/build/riscv64-spike-so LLVM_COVER=1 -j
 ./build/fuzzer -f --max-runs 100 --corpus-input $CORPUS -- --max-cycles 10000
 ```
 
+If you are using [NEMU](https://github.com/OpenXiangShan/NEMU) as the REF with LLVM branch coverage instrumented, you may build it
+with the following commands: `make staticlib CC="clang -fsanitize-coverage=trace-pc-guard -fsanitize-coverage=pc-table -g" CXX="clang++ -fsanitize-coverage=trace-pc-guard -fsanitize-coverage=pc-table -g"`.
+If you are not using LLVM branch coverage, you can simply follow the NEMU docs to build the general-purpose dynamic library `.so` file.
+
+If you are fuzzing the [XiangShan](https://github.com/OpenXiangShan/XiangShan) RISC-V processor, for example, with LLVM branch coverage instrumented NEMU,
+you can use the following command *after* you build the static NEMU library: `make emu XFUZZ=1 REF=$NEMU_HOME/build/libriscv64-nemu-interpreter.a LLVM_COVER=1 EMU_THREADS=16 WITH_CHISELDB=0 WITH_CONSTANTIN=0 EMU_TRACE=1 CONFIG=FuzzConfig`.
+If you are not using LLVM branch coverage, please read the following sections carefully and try the flow by yourself.
+
 ## Integrating Hardware Designs
 
 This repository is not a self-running repository.
