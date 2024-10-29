@@ -14,7 +14,8 @@ extern crate md5;
 use std::fs;
 use std::path::PathBuf;
 
-use libafl::prelude::{BytesInput, Corpus, HasBytesVec, InMemoryCorpus, Input, OnDiskCorpus};
+use libafl::inputs::HasMutatorBytes;
+use libafl::prelude::{BytesInput, Corpus, InMemoryCorpus, Input, OnDiskCorpus};
 use libafl::state::{HasCorpus, StdState};
 use libafl_bolts::rands::RomuDuoJrRand;
 
