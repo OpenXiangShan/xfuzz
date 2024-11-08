@@ -132,4 +132,4 @@ This project has been adopted by researchers from academia and industry.
 We appreciate their contributions for the open-source community.
 Your valuable Issues and Pull Requests are always welcomed.
 
-- PathFuzz: Broadening Fuzzing Horizons with Footprint Memory for CPUs. DAC'23. [DOI](https://doi.org/10.1145/3649329.3655911), [Paper](https://www.dac.com/proceedings61), [Presentation (ChinaSys)](https://drive.google.com/file/d/1SfXSfWkwMqqVNuTauUpFvfP5Q5JV2oMw/view?usp=sharing).
+- PathFuzz: Broadening Fuzzing Horizons with Footprint Memory for CPUs. DAC'23. [DOI (ACM, Open Access)](https://doi.org/10.1145/3649329.3655911), [Presentation (ChinaSys)](https://drive.google.com/file/d/1SfXSfWkwMqqVNuTauUpFvfP5Q5JV2oMw/view?usp=sharing).
