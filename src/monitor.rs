@@ -36,14 +36,14 @@ pub fn store_testcases(
     for id in corpus.ids() {
         let testcase: std::cell::RefMut<libafl::prelude::Testcase<BytesInput>> =
             corpus.get(id).unwrap().borrow_mut();
-        let executions = testcase.executions();
+        let exec_time = testcase.exec_time().map(|s| s.as_secs()).unwrap_or(0);
         let scheduled_count = testcase.scheduled_count();
         let parent_id = if testcase.parent_id().is_some() {
             usize::from(testcase.parent_id().unwrap()) as i32
         } else {
             -1
         };
-        println!("Corpus {id}: executions {executions}, scheduled_count {scheduled_count}, parent_id {parent_id}");
+        println!("Corpus {id}: exec_time {exec_time}, scheduled_count {scheduled_count}, parent_id {parent_id}");
         let x = testcase.input().as_ref().unwrap();
         store_testcase(x, &output_dir, Some(id.to_string()));
     }

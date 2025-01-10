@@ -1,3 +1,4 @@
+use std::num::NonZero;
 /**
  * Copyright (c) 2023 Institute of Computing Technology, Chinese Academy of Sciences
  * xfuzz is licensed under Mulan PSL v2.
@@ -85,7 +86,7 @@ pub(crate) fn run_fuzzer(
                     )
                 });
         } else {
-            let mut generator = RandBytesGenerator::new(16384);
+            let mut generator = RandBytesGenerator::new(NonZero::new(16384).unwrap());
             state
                 .generate_initial_inputs(&mut fuzzer, &mut executor, &mut generator, &mut mgr, 32)
                 .expect("Failed to generate the initial corpus");
