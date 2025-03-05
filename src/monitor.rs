@@ -14,17 +14,17 @@ extern crate md5;
 use std::fs;
 use std::path::PathBuf;
 
-use libafl::inputs::HasMutatorBytes;
+use libafl::inputs::{HasMutatorBytes, ValueInput};
 use libafl::prelude::{BytesInput, Corpus, InMemoryCorpus, Input, OnDiskCorpus};
 use libafl::state::{HasCorpus, StdState};
 use libafl_bolts::rands::RomuDuoJrRand;
 
 pub fn store_testcases(
     state: &mut StdState<
-        BytesInput,
-        InMemoryCorpus<BytesInput>,
+        InMemoryCorpus<ValueInput<Vec<u8>>>,
+        ValueInput<Vec<u8>>,
         RomuDuoJrRand,
-        OnDiskCorpus<BytesInput>,
+        OnDiskCorpus<ValueInput<Vec<u8>>>,
     >,
     output_dir: String,
 ) {
@@ -56,7 +56,7 @@ pub fn store_testcase(input: &BytesInput, output_dir: &String, name: Option<Stri
         name.unwrap()
     } else {
         let mut context = md5::Context::new();
-        context.consume(input.bytes());
+        context.consume(input.mutator_bytes());
         format!("{:x}", context.compute())
     };
 

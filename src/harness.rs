@@ -65,7 +65,7 @@ fn sim_run(workload: &String) -> i32 {
 
 fn sim_run_from_memory(input: &BytesInput) -> i32 {
     // create a workload-in-memory name for the input bytes
-    let wim_bytes = input.bytes();
+    let wim_bytes = input.mutator_bytes();
     let wim_addr = wim_bytes.as_ptr();
     let wim_size = wim_bytes.len() as u64;
     let wim_name = format!("wim@{wim_addr:p}+0x{wim_size:x}");
