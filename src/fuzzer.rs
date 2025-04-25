@@ -11,6 +11,7 @@ use std::num::NonZero;
  * See the Mulan PSL v2 for more details.
  */
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::coverage::*;
 use crate::harness;
@@ -26,6 +27,7 @@ use libafl_bolts::{current_nanos, rands::StdRand, tuples::tuple_list};
 pub(crate) fn run_fuzzer(
     random_input: bool,
     max_iters: Option<u64>,
+    max_run_timeout: Option<u64>,
     corpus_input: Option<String>,
     corpus_output: Option<String>,
     continue_on_errors: bool,
@@ -55,13 +57,14 @@ pub(crate) fn run_fuzzer(
     // Fuzzer, Executor
     let mut fuzzer = StdFuzzer::new(scheduler, feedback, objective);
     let mut binding = harness::fuzz_harness;
-    let mut executor = InProcessExecutor::new(
+    let mut executor = InProcessExecutor::with_timeout(
         &mut binding,
         // tuple_list!(edges_observer, time_observer),
         tuple_list!(observer),
         &mut fuzzer,
         &mut state,
         &mut mgr,
+        Duration::from_secs(max_run_timeout.unwrap_or(10)),
     )
     .unwrap();
 

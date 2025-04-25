@@ -29,6 +29,8 @@ struct Arguments {
     max_iters: Option<u64>,
     #[clap(long)]
     max_runs: Option<u64>,
+    #[clap(long)]
+    max_run_timeout: Option<u64>,
     #[clap(default_value_t = false, long)]
     random_input: bool,
     #[clap(default_value_t = String::from("./corpus"), long)]
@@ -92,6 +94,7 @@ fn main() -> i32 {
         fuzzer::run_fuzzer(
             args.random_input,
             args.max_iters,
+            args.max_run_timeout,
             corpus_input,
             args.corpus_output,
             args.continue_on_errors,
