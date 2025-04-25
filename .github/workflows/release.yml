@@ -1,0 +1,96 @@
+name: GitHub Release
+
+on:
+  schedule:
+    # Runs at 07:30 Asia/Shanghai (UTC+8) => 23:30 UTC (previous day)
+    - cron: '30 23 * * *'
+  push:
+    branches: [ release ]
+
+jobs:
+  # 1. Build artifacts in parallel
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-20.04, ubuntu-22.04, ubuntu-24.04]
+    runs-on: ubuntu-latest
+    container: ghcr.io/openxiangshan/${{ matrix.os }}:latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Build libfuzzer.a on ${{ matrix.os }}
+        run: |
+          # install Rust
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          source $HOME/.cargo/env
+          cargo install cargo-make
+          # build libfuzzer.a
+          make build
+          # rename it before upload
+          # downloaded artifacts will have original names (different from the artifact name)
+          mv target/release/libfuzzer.a libfuzzer-${{ matrix.os }}.a
+
+      - name: Upload artifact for ${{ matrix.os }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: libfuzzer-${{ matrix.os }}.a
+          path: libfuzzer-${{ matrix.os }}.a
+
+  # 2. Create release if there are new commits since last tag
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+
+      - name: Fetch all tags
+        run: git fetch --tags
+
+      - name: Check for commits since last release
+        id: check_changes
+        run: |
+          LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1) || echo "")
+          if [ -z "$LATEST_TAG" ]; then
+            echo "::set-output name=changed::true"
+          else
+            COUNT=$(git rev-list ${LATEST_TAG}..HEAD --count)
+            if [ "$COUNT" -gt 0 ]; then
+              echo "::set-output name=changed::true"
+            else
+              echo "::set-output name=changed::false"
+            fi
+          fi
+        shell: bash
+
+      - name: Set release date (UTC+8)
+        id: vars
+        run: echo "RELEASE_DATE=$(date -u -d '8 hours' +'%Y-%m-%d')" >> $GITHUB_ENV
+
+      - name: Create Git tag
+        if: steps.check_changes.outputs.changed == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ env.RELEASE_DATE }}" -m "Release ${{ env.RELEASE_DATE }}"
+          git push origin "${{ env.RELEASE_DATE }}"
+
+      - name: Create Release
+        if: steps.check_changes.outputs.changed == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_DATE }}
+          name: ${{ env.RELEASE_DATE }}
+          make_latest: 'true'
+          fail_on_unmatched_files: true
+          preserve_order: true
+          files: |
+            libfuzzer-ubuntu-20.04.a
+            libfuzzer-ubuntu-22.04.a
+            libfuzzer-ubuntu-24.04.a
