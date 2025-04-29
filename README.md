@@ -16,7 +16,7 @@ The [Makefile](Makefile) provides some simple commands to build the target `libf
 
 ## Example
 
-We have a real example using the rocket-chip (DUT) and Spike (REF) [here](https://github.com/OpenXiangShan/difftest/blob/master/.github/workflows/main.yml#L205-L267).
+We have a real example using the rocket-chip (DUT) and Spike (REF) [here](https://github.com/OpenXiangShan/difftest/blob/master/.github/workflows/nightly.yml#L9).
 This `test-difftest-fuzzing` CI test builds the fuzzer and runs it for 10000 runs (testcases).
 
 Run `fuzzer --help` for a full list of runtime arguments.
