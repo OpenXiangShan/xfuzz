@@ -1,3 +1,5 @@
+use std::sync::{Mutex, OnceLock};
+
 /**
  * Copyright (c) 2023 Institute of Computing Technology, Chinese Academy of Sciences
  * xfuzz is licensed under Mulan PSL v2.
@@ -59,24 +61,38 @@ impl Coverage {
     }
 }
 
-static mut ICOVERAGE: Option<Coverage> = None;
+static ICOVERAGE: OnceLock<Mutex<Coverage>> = OnceLock::new();
 
+/// Call this once, right after your C test‑bench has told you how many
+/// counters are present.
 pub(crate) fn cover_init() {
-    unsafe { ICOVERAGE = Some(Coverage::new(get_cover_number() as usize)) };
+    let cover = Coverage::new(unsafe { get_cover_number() as usize });
+    // `set` returns Err if it was already initialised; handle that however
+    // you prefer (here we just ignore the second call).
+    let _ = ICOVERAGE.set(Mutex::new(cover));
+}
+
+fn cov() -> std::sync::MutexGuard<'static, Coverage> {
+    ICOVERAGE
+        .get()
+        .expect("cover_init() not called")
+        .lock()
+        .expect("poisoned mutex")
 }
 
 pub(crate) fn cover_len() -> usize {
-    unsafe { ICOVERAGE.as_ref().unwrap().len() }
+    cov().len()
 }
 
 pub(crate) fn cover_as_mut_ptr() -> *mut i8 {
-    unsafe { ICOVERAGE.as_ref().unwrap().as_mut_ptr() }
+    let guard = cov();
+    guard.as_mut_ptr().cast::<i8>()
 }
 
 pub(crate) fn cover_accumulate() {
-    unsafe { ICOVERAGE.as_mut().unwrap().accumulate() }
+    cov().accumulate()
 }
 
 pub(crate) fn cover_display() {
-    unsafe { ICOVERAGE.as_ref().unwrap().display() }
+    cov().display()
 }

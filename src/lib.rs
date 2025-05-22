@@ -49,7 +49,7 @@ struct Arguments {
     extra_args: Vec<String>,
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 fn main() -> i32 {
     let args = Arguments::parse();
 

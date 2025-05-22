@@ -17,11 +17,11 @@ use crate::coverage::*;
 use crate::harness;
 use crate::monitor;
 
+use libafl::StdFuzzer;
 use libafl::prelude::*;
 use libafl::schedulers::QueueScheduler;
 use libafl::stages::StdMutationalStage;
 use libafl::state::StdState;
-use libafl::StdFuzzer;
 use libafl_bolts::{current_nanos, rands::StdRand, tuples::tuple_list};
 
 pub(crate) fn run_fuzzer(

@@ -1,3 +1,5 @@
+use std::sync::{Mutex, OnceLock};
+
 /**
  * Copyright (c) 2023 Institute of Computing Technology, Chinese Academy of Sciences
  * xfuzz is licensed under Mulan PSL v2.
@@ -21,7 +23,7 @@ use crate::monitor::store_testcase;
 use libafl::prelude::*;
 use libc::*;
 
-extern "C" {
+unsafe extern "C" {
     pub fn sim_main(argc: c_int, argv: *const *const c_char) -> c_int;
 
     pub fn get_cover_number() -> c_uint;
@@ -37,7 +39,7 @@ extern "C" {
     pub fn disable_sim_verbose();
 }
 
-static mut SIM_ARGS: Vec<String> = vec![];
+static SIM_ARGS: OnceLock<Mutex<Vec<String>>> = OnceLock::new();
 
 fn sim_run(workload: &String) -> i32 {
     // prepare the simulation arguments in Vec<String> format
@@ -45,7 +47,12 @@ fn sim_run(workload: &String) -> i32 {
         .iter()
         .map(|s| s.to_string())
         .collect();
-    unsafe { sim_args.extend(SIM_ARGS.iter().cloned()) };
+    let guard = SIM_ARGS
+        .get()
+        .expect("SIM_ARGS not initialized")
+        .lock()
+        .unwrap();
+    sim_args.extend(guard.iter().cloned());
 
     // convert the simulation arguments into c_char**
     let sim_args: Vec<_> = sim_args
@@ -150,9 +157,7 @@ pub(crate) fn set_sim_env(
         unsafe { MAX_RUNS = max_runs.unwrap() };
     }
 
-    unsafe {
-        SIM_ARGS = emu_args;
-    }
+    let _ = SIM_ARGS.set(Mutex::new(emu_args));
 
     cover_init();
 }

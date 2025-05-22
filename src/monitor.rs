@@ -43,7 +43,9 @@ pub fn store_testcases(
         } else {
             -1
         };
-        println!("Corpus {id}: exec_time {exec_time}, scheduled_count {scheduled_count}, parent_id {parent_id}");
+        println!(
+            "Corpus {id}: exec_time {exec_time}, scheduled_count {scheduled_count}, parent_id {parent_id}"
+        );
         let x = testcase.input().as_ref().unwrap();
         store_testcase(x, &output_dir, Some(id.to_string()));
     }
