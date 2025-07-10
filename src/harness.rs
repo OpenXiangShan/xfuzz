@@ -28,7 +28,7 @@ unsafe extern "C" {
 
     pub fn get_cover_number() -> c_uint;
 
-    pub fn update_stats(bitmap: *mut c_char);
+    pub fn update_stats(bitmap: *mut c_uchar);
 
     pub fn display_uncovered_points();
 

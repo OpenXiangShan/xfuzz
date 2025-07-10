@@ -14,8 +14,8 @@ use std::sync::{Mutex, OnceLock};
 use crate::harness::get_cover_number;
 
 struct Coverage {
-    cover_points: Vec<i8>,
-    accumulated: Vec<i8>,
+    cover_points: Vec<u8>,
+    accumulated: Vec<u8>,
 }
 
 impl Coverage {
@@ -30,13 +30,13 @@ impl Coverage {
         self.cover_points.capacity()
     }
 
-    pub fn as_mut_ptr(&self) -> *mut i8 {
+    pub fn as_mut_ptr(&self) -> *mut u8 {
         self.cover_points.as_ptr().cast_mut()
     }
 
     pub fn accumulate(&mut self) {
         for (i, covered) in self.cover_points.iter().enumerate() {
-            if *covered != 0 as i8 {
+            if *covered != 0 as u8 {
                 self.accumulated[i] = 1;
             }
         }
@@ -45,7 +45,7 @@ impl Coverage {
     pub fn get_accumulative_coverage(&self) -> f64 {
         let mut covered_num: usize = 0;
         for covered in self.accumulated.iter() {
-            if *covered != 0 as i8 {
+            if *covered != 0 as u8 {
                 covered_num += 1;
             }
         }
@@ -84,9 +84,9 @@ pub(crate) fn cover_len() -> usize {
     cov().len()
 }
 
-pub(crate) fn cover_as_mut_ptr() -> *mut i8 {
+pub(crate) fn cover_as_mut_ptr() -> *mut u8 {
     let guard = cov();
-    guard.as_mut_ptr().cast::<i8>()
+    guard.as_mut_ptr().cast::<u8>()
 }
 
 pub(crate) fn cover_accumulate() {

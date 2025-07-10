@@ -103,7 +103,7 @@ pub(crate) fn run_fuzzer(
     }
 
     // Mutator
-    let mutator = StdScheduledMutator::new(havoc_mutations());
+    let mutator = HavocScheduledMutator::new(havoc_mutations());
     let mut stages = tuple_list!(StdMutationalStage::new(mutator));
 
     // Fuzzing Loop
