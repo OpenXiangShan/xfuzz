@@ -9,8 +9,8 @@ default = ["std"]
 std = []
 
 [dependencies]
-libafl = { path = "./LibAFL/libafl/", features = ["prelude"] }
-libafl_bolts = { path = "./LibAFL/libafl_bolts/" }
+libafl = { path = "./LibAFL/crates/libafl/", features = ["prelude"] }
+libafl_bolts = { path = "./LibAFL/crates/libafl_bolts/" }
 clap = { version = "4.5.20", features = ["derive"] }
 libc = "0.2"
 md5 = "0.7"
