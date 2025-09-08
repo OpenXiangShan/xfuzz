@@ -83,6 +83,14 @@ Once you build the simulation executable, [xfuzz](xfuzz) provides some Python sc
 
 ## Coverage Instrumentation for Chisel Designs
 
+### CIRCT Passes
+
+To instrument coverage for latest Chisel designs, please use the customized FIRTOOL toolchain from [OpenXiangShan](https://github.com/OpenXiangShan/circt).
+
+### Scala FIRRTL Transforms
+
+**Warning (September 2025): Chisel 3 has been deprecated in DiffTest. If you are using these SFC transforms, please use an older version of DiffTest (no later than [8504ad8](https://github.com/OpenXiangShan/difftest/commit/8504ad8ddf1a3b82f407b983eae14bef34358370)).**
+
 To instrument Chisel coverage metrics into your Chisel designs and use them as the coverage feedback for fuzzing, we provide some useful FIRRTL transforms in the `instrumentation` directory.
 These transforms are mostly migrated from some other projects, including [ekiwi/rfuzz](https://github.com/ekiwi/rfuzz), [compsec-snu/difuzz-rtl](https://github.com/compsec-snu/difuzz-rtl), and [ekiwi/simulator-independent-coverage](https://github.com/ekiwi/simulator-independent-coverage).
 
