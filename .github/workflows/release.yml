@@ -5,7 +5,10 @@ on:
     # Runs at 07:30 Asia/Shanghai (UTC+8) => 23:30 UTC (previous day)
     - cron: '30 23 * * *'
   push:
-    branches: [ release ]
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   # 1. Build artifacts in parallel
@@ -43,6 +46,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
     steps:
       - uses: actions/checkout@v4
 
@@ -58,13 +62,13 @@ jobs:
         run: |
           LATEST_TAG=$(git describe --tags $(git rev-list --tags --max-count=1) || echo "")
           if [ -z "$LATEST_TAG" ]; then
-            echo "::set-output name=changed::true"
+            echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             COUNT=$(git rev-list ${LATEST_TAG}..HEAD --count)
             if [ "$COUNT" -gt 0 ]; then
-              echo "::set-output name=changed::true"
+              echo "changed=true" >> "$GITHUB_OUTPUT"
             else
-              echo "::set-output name=changed::false"
+              echo "changed=false" >> "$GITHUB_OUTPUT"
             fi
           fi
         shell: bash
